@@ -15,9 +15,16 @@ Configuration is read from a .env file:
 import requests, urllib3
 import os
 import time
+import logging
 from dotenv import load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Load VERKADA_API_KEY, HUE_IP and HUE_USERNAME from .env into the environment
 load_dotenv()
@@ -66,13 +73,17 @@ def poll_camera(token):
     # last_seen is a Unix timestamp; display it in Pacific time
     last_seen = datetime.fromtimestamp(poi["last_seen"], tz=ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M:%S %Z")
 
-    if person == POI_USER and (time.time() - poi["last_seen"]) > 1800:
-        print(f'{person} was last seen at {last_seen}, more than 30 minutes ago')
+    if person == POI_USER and (time.time() - poi["last_seen"]) < 20:
+        logger.info(f'{person} was last seen at {last_seen}, triggeringh lights')
         # get_lights() returns [light_ids, light_name]; index 0 is the list of
         # reachable light IDs
         for item in get_lights()[0]:
             for num, light in enumerate(item):
-                turn_on_lights(light, item[num])
+                try:
+                    turn_on_lights(light, item[num])
+                except Exception:
+                    # one failing light shouldn't stop the rest
+                    logger.exception(f'Error turning on light {light}.')
 
 def get_lights():
     """Query the Hue bridge for all lights and report which are reachable.
@@ -95,11 +106,11 @@ def get_lights():
         if light["state"]["reachable"] == True and light["state"]["on"] == False:
             light_ids.append(light_id)
             light_names.append(light_name)
-            print(f'{light_name} is reachable and off.')
+            logger.info(f'{light_name} is reachable and off.')
         elif light["state"]["reachable"]:
-            print(f'{light_name} is reachable')
+            logger.info(f'{light_name} is reachable')
         else:
-            print(f'{light_name} is unreachable.')
+            logger.warning(f'{light_name} is unreachable.')
 
     return [light_ids, light_names]
 
@@ -112,26 +123,34 @@ def turn_on_lights(light, name):
     headers = {}
 
     response = requests.request("PUT", url, headers=headers, data=payload)
-    # Hue replies with a success entry such as {"success": {"/lights/1/state/on": true}}
-    print(response.text)
-    if response.json()[0]["success"].keys() == "/lights/{light}/state/on" and response[1].item() == "true":
-        print(f'{name} has been turned on.')
+    if response.json()[0]["success"].keys() == "/lights/{light}/state/on" and response[1].item() == True:
+        logger.info(f'{name} has been turned on.')
     else:
-        print(f'{name} was not able to be turned on.')
+        logger.warning(f'{name} was not able to be turned on.')
 
 def main():
     """Poll Verkada continuously, refreshing the auth token every ~30 minutes."""
-    print("Script starting....")
+    logger.info("Script starting....")
     # Time the current Verkada token was issued; used to decide when to refresh it
     auth_timer = 0
     while True:
         # Tokens last about 30 minutes; refresh just before expiry (1790s)
         if (time.time() - auth_timer) > 1790:
-            auth_payload = auth()
-            auth_timer = auth_payload[1]
-            token = auth_payload[0]
-            print("Obtaining new auth token from Verkada.")
-        poll_camera(token)
+            try:
+                auth_payload = auth()
+                auth_timer = auth_payload[1]
+                token = auth_payload[0]
+                logger.info("Obtaining new auth token from Verkada.")
+            except Exception:
+                # auth_timer is unchanged, so the next loop retries; back off
+                # so a Verkada outage doesn't hammer the token endpoint
+                logger.exception("Failed to obtain Verkada auth token; retrying in 30s.")
+                time.sleep(30)
+                continue
+        try:
+            poll_camera(token)
+        except Exception:
+            logger.exception("Error while polling Verkada camera.")
         time.sleep(1)
 
 main()

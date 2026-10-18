@@ -40,10 +40,3 @@ POI_USER=POI user in Verkada Command
 ```bash
 python poll_camera.py
 ```
-
-## Known issues
-
-The script is a work in progress and has bugs that prevent it from running end to end:
-
-- `get_lights()` compares `reachable` to the string `"true"` (the Hue API returns a boolean) and returns `light_name` (last name) instead of `light_names`; the caller then unpacks it as `(light, name)` pairs.
-- `turn_on_lights()` sends `{"off": true}` (Hue expects `{"on": true}`) and indexes the `requests` response object directly instead of `response.json()`.
