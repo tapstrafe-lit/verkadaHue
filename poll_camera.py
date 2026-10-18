@@ -79,7 +79,11 @@ def poll_camera(token):
         # reachable light IDs
         for item in get_lights()[0]:
             for num, light in enumerate(item):
-                turn_on_lights(light, item[num])
+                try:
+                    turn_on_lights(light, item[num])
+                except Exception:
+                    # one failing light shouldn't stop the rest
+                    logger.exception(f'Error turning on light {light}.')
 
 def get_lights():
     """Query the Hue bridge for all lights and report which are reachable.
@@ -132,11 +136,21 @@ def main():
     while True:
         # Tokens last about 30 minutes; refresh just before expiry (1790s)
         if (time.time() - auth_timer) > 1790:
-            auth_payload = auth()
-            auth_timer = auth_payload[1]
-            token = auth_payload[0]
-            logger.info("Obtaining new auth token from Verkada.")
-        poll_camera(token)
+            try:
+                auth_payload = auth()
+                auth_timer = auth_payload[1]
+                token = auth_payload[0]
+                logger.info("Obtaining new auth token from Verkada.")
+            except Exception:
+                # auth_timer is unchanged, so the next loop retries; back off
+                # so a Verkada outage doesn't hammer the token endpoint
+                logger.exception("Failed to obtain Verkada auth token; retrying in 30s.")
+                time.sleep(30)
+                continue
+        try:
+            poll_camera(token)
+        except Exception:
+            logger.exception("Error while polling Verkada camera.")
         time.sleep(1)
 
 main()
