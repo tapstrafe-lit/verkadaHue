@@ -73,8 +73,8 @@ def poll_camera(token):
     # last_seen is a Unix timestamp; display it in Pacific time
     last_seen = datetime.fromtimestamp(poi["last_seen"], tz=ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M:%S %Z")
 
-    if person == POI_USER and (time.time() - poi["last_seen"]) > 1800:
-        logger.info(f'{person} was last seen at {last_seen}, more than 30 minutes ago')
+    if person == POI_USER and (time.time() - poi["last_seen"]) < 20:
+        logger.info(f'{person} was last seen at {last_seen}, triggeringh lights')
         # get_lights() returns [light_ids, light_name]; index 0 is the list of
         # reachable light IDs
         for item in get_lights()[0]:
@@ -123,7 +123,7 @@ def turn_on_lights(light, name):
     headers = {}
 
     response = requests.request("PUT", url, headers=headers, data=payload)
-    if response.json()[0]["success"].keys() == "/lights/{light}/state/on" and response[1].item() == "true":
+    if response.json()[0]["success"].keys() == "/lights/{light}/state/on" and response[1].item() == True:
         logger.info(f'{name} has been turned on.')
     else:
         logger.warning(f'{name} was not able to be turned on.')
