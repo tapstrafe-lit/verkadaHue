@@ -1,7 +1,7 @@
 # tapVerkada
 
 A small Python script that polls the [Verkada](https://www.verkada.com/) Cameras API for the most recent
-"person of interest" and, when that person is `Nate`, triggers Philips Hue lights through the local Hue bridge.
+"person of interest" and, when that person is `POI_USER`, triggers Philips Hue lights through the local Hue bridge.
 
 ## How it works
 
